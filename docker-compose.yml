@@ -1,0 +1,67 @@
+version: '2'
+
+services:
+  redis:
+    image: redis
+    volumes:
+      - ./backend/tmp/redis:/data
+    ports:
+      - 6379:6379
+  worker:
+    build: backend
+    command: bundle exec sidekiq
+    environment:
+      REDIS_URL: redis://redis:6379/0
+    volumes:
+      - ./backend:/usr/src/backend-app
+    depends_on:
+      - db
+      - redis
+  nginx:
+    image: bitnami/nginx:latest
+    volumes:
+      - ./config/nginx:/opt/bitnami/nginx/conf/vhosts
+    depends_on:
+      - backend
+      - frontend
+    environment:
+      VIRTUAL_HOST: yourproject.docker
+      VIRTUAL_PORT: 8080
+    ports:
+      - 8080:8080
+  db:
+    image: postgres
+    volumes:
+      - /var/lib/postgresql/data
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: secret
+      ALLOW_IP_RANGE: 0.0.0.0/0
+    ports:
+      - 54321:5432
+  maildev:
+    image: djfarrelly/maildev
+    ports:
+      - "1080:80"
+  backend:
+    build: backend
+    depends_on:
+      - db
+      - redis
+      - worker
+    volumes:
+      - ./backend:/usr/src/backend-app
+    environment:
+      REDIS_URL: redis://redis:6379/0
+      SIDEKIQ_REDIS_URL: redis://redis:6379/1
+  frontend:
+    build:
+      context: ./frontend/
+    depends_on:
+      - backend
+    command: npm start
+    volumes:
+      - ./frontend/:/usr/src/frontend-app
+      - ./frontend/node_modules:/usr/src/frontend-app/node_modules
+    ports:
+      - "35729:35729"
